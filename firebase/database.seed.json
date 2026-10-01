@@ -1,0 +1,34 @@
+{
+  "deviceUsers": {
+    "dryer-01": {
+      "QQQR7aEcNUQ2nLqJf1BhMGGlvJs1": true
+    }
+  },
+  "deviceAuth": {
+    "dryer-01": "cdlsPFaECePDWvcLVWej5S0GKC83"
+  },
+  "devices": {
+    "dryer-01": {
+      "telemetry": {
+        "temperatureC": 0,
+        "humidityPct": 0,
+        "flowLpm": 0,
+        "totalMl": 0,
+        "raining": false,
+        "updatedAt": 0
+      },
+      "control": {
+        "mode": "AUTO",
+        "targetAngle": 0,
+        "commandId": "setup-expired",
+        "issuedAt": 0,
+        "expiresAt": 0
+      },
+      "reported": {
+        "mode": "AUTO",
+        "servoAngle": 0,
+        "appliedCommandId": "boot"
+      }
+    }
+  }
+}

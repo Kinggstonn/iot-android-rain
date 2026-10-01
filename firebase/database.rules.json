@@ -1,0 +1,51 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "devices": {
+      "$device": {
+        ".read": "auth != null && (root.child('deviceUsers').child($device).child(auth.uid).val() === true || root.child('deviceAuth').child($device).val() === auth.uid)",
+        "telemetry": {
+          ".write": "auth != null && root.child('deviceAuth').child($device).val() === auth.uid && newData.exists()",
+          ".validate": "newData.hasChildren(['flowLpm','totalMl','raining','updatedAt'])",
+          "temperatureC": {".validate": "newData.isNumber() && newData.val() >= -40 && newData.val() <= 125"},
+          "humidityPct": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"},
+          "flowLpm": {".validate": "newData.isNumber() && newData.val() >= 0"},
+          "totalMl": {".validate": "newData.isNumber() && newData.val() >= 0"},
+          "raining": {".validate": "newData.isBoolean()"},
+          "updatedAt": {".validate": "newData.isNumber() && newData.val() >= now - 10000 && newData.val() <= now + 5000"},
+          "$other": {".validate": false}
+        },
+        "reported": {
+          ".write": "auth != null && root.child('deviceAuth').child($device).val() === auth.uid && newData.exists()",
+          ".validate": "newData.hasChildren(['mode','servoAngle','appliedCommandId'])",
+          "mode": {".validate": "newData.val() === 'AUTO' || newData.val() === 'MANUAL'"},
+          "servoAngle": {".validate": "newData.val() === 0 || newData.val() === 90"},
+          "appliedCommandId": {".validate": "newData.isString() && newData.val().length <= 64"},
+          "$other": {".validate": false}
+        },
+        "control": {
+          ".write": "auth != null && root.child('deviceUsers').child($device).child(auth.uid).val() === true && newData.exists()",
+          ".validate": "newData.hasChildren(['mode','targetAngle','commandId','issuedAt','expiresAt']) && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 20000 && newData.child('expiresAt').val() > newData.child('issuedAt').val() && newData.child('expiresAt').val() - newData.child('issuedAt').val() <= 20000",
+          "mode": {".validate": "newData.val() === 'AUTO' || newData.val() === 'MANUAL'"},
+          "targetAngle": {".validate": "newData.val() === 0 || newData.val() === 90"},
+          "commandId": {".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"},
+          "issuedAt": {".validate": "newData.isNumber() && newData.val() >= now - 10000 && newData.val() <= now + 5000"},
+          "expiresAt": {".validate": "newData.isNumber()"},
+          "$other": {".validate": false}
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        "fcmTokens": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$token": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.val() === true && $token.length <= 4096"
+          }
+        }
+      }
+    }
+  }
+}

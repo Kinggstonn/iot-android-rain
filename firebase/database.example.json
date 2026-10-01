@@ -1,0 +1,24 @@
+{
+  "deviceUsers": {"dryer-01": {"PHONE_USER_UID": true}},
+  "deviceAuth": {"dryer-01": "ESP_USER_UID"},
+  "devices": {
+    "dryer-01": {
+      "telemetry": {
+        "temperatureC": 29.5,
+        "humidityPct": 72.0,
+        "flowLpm": 0.125,
+        "totalMl": 345.0,
+        "raining": false,
+        "updatedAt": 1789516800000
+      },
+      "control": {
+        "mode": "AUTO",
+        "targetAngle": 0,
+        "commandId": "initial-expired",
+        "issuedAt": 1789516800000,
+        "expiresAt": 1789516815000
+      },
+      "reported": {"mode": "AUTO", "servoAngle": 0, "appliedCommandId": "boot"}
+    }
+  }
+}

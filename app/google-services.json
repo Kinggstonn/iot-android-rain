@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1097021537921",
+    "firebase_url": "https://esp8266android-b7e1c-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "esp8266android-b7e1c",
+    "storage_bucket": "esp8266android-b7e1c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1097021537921:android:dcb3dcd04ad41604e81780",
+        "android_client_info": {
+          "package_name": "com.example.esp8266prj"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoBKXaEhfUsiKrsGwlMKs1WgzNfFMIoMc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
