@@ -13,6 +13,11 @@
 constexpr uint8_t RAIN_PIN = D0, FLOW_PIN = D2, SERVO_PIN = D4;
 constexpr uint8_t RAIN_LEVEL = LOW;
 constexpr double FLOW_HZ_PER_LPM = 5.5; // EXAMPLE ONLY: calibrate your particular YF-S401.
+// Logical angle is what the app uses/validates: 0 = extended, 90 = retracted.
+// Reversed 180-degree mounting: extended -> 180 deg, retracted -> 0 deg.
+constexpr int ANGLE_EXTENDED = 0, ANGLE_RETRACTED = 90;
+constexpr int servoWrite(int logical) { return logical == ANGLE_RETRACTED ? 0 : 180; }
+constexpr int ANGLE_DRY = ANGLE_EXTENDED, ANGLE_RAIN = ANGLE_RETRACTED;
 DHT dht(D3, DHT11);
 Servo servo;
 volatile uint32_t pulses = 0;
@@ -92,7 +97,7 @@ bool pollCommand() {
   const int target = command["targetAngle"];
   const uint64_t expires = command["expiresAt"], issued = command["issuedAt"], now = epochMs();
   if (expires <= now || expires > now + 20000 || issued > now + 5000 || expires <= issued || expires - issued > 20000) return true;
-  if ((mode != "AUTO" && mode != "MANUAL") || (target != 0 && target != 90)) return true;
+  if ((mode != "AUTO" && mode != "MANUAL") || (target != ANGLE_RAIN && target != ANGLE_DRY)) return true;
   const bool resetTotal = id.startsWith("reset-total:");
   if (resetTotal) {
     noInterrupts(); pulses = 0; totalPulses = 0; interrupts();
@@ -100,8 +105,8 @@ bool pollCommand() {
     Serial.println(F("[Control] Total water reset to 0"));
   }
   automatic = mode == "AUTO";
-  angle = automatic ? (raining ? 90 : 0) : target;
-  servo.write(angle);
+  angle = automatic ? (raining ? ANGLE_RAIN : ANGLE_DRY) : target;
+  servo.write(servoWrite(angle));
   appliedId = id; // Ack means commanded angle, not measured mechanical position.
   return true;
 }
@@ -128,7 +133,7 @@ void setup() {
   pinMode(RAIN_PIN, INPUT); pinMode(FLOW_PIN, INPUT_PULLUP);
   raining = candidate = digitalRead(RAIN_PIN) == RAIN_LEVEL;
   candidateAt = sampledAt = millis();
-  angle = raining ? 90 : 0; servo.attach(SERVO_PIN); servo.write(angle);
+  angle = raining ? ANGLE_RAIN : ANGLE_DRY; servo.attach(SERVO_PIN); servo.write(servoWrite(angle));
   attachInterrupt(digitalPinToInterrupt(FLOW_PIN), onPulse, FALLING);
   trustAnchors = new BearSSL::X509List(GOOGLE_ROOT_CA_BUNDLE);
   Serial.printf("[TLS] Loaded %u trust anchors\n", (unsigned)trustAnchors->getCount());
@@ -152,8 +157,8 @@ void loop() {
   if (raw != candidate) { candidate = raw; candidateAt = now; }
   if (candidate != raining && now - candidateAt >= 300) raining = candidate;
   if (automatic) {
-    const int desired = raining ? 90 : 0;
-    if (angle != desired) { angle = desired; servo.write(angle); }
+    const int desired = raining ? ANGLE_RAIN : ANGLE_DRY;
+    if (angle != desired) { angle = desired; servo.write(servoWrite(angle)); }
   }
   if (now - sampledAt >= 1000) {
     noInterrupts(); const uint32_t count = pulses; pulses = 0; interrupts();

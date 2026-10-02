@@ -154,8 +154,8 @@ class MainActivity : AppCompatActivity() {
                 if (!rendering) send(if (checked) "AUTO" else "MANUAL", repository?.state?.angle ?: 90)
             }
         }
-        retract = button("Thu đồ vào · 90°") { send("MANUAL", 90) }
-        extend = button("Đưa đồ ra · 0°") { send("MANUAL", 0) }
+        retract = button("Thu đồ vào ") { send("MANUAL", 90) }
+        extend = button("Đưa đồ ra ") { send("MANUAL", 0) }
         resetTotal = button("Đặt lại tổng lượng mưa") {
             android.app.AlertDialog.Builder(this)
                 .setTitle("Đặt tổng tích lũy về 0?")
@@ -223,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         rain.text = when (state.raining) { true -> "●  ĐANG MƯA"; false -> "●  TẠNH RÁO"; null -> "CHƯA CÓ DỮ LIỆU MƯA" }
         rain.setTextColor(when (state.raining) { true -> red; false -> green; null -> muted })
         rain.alpha = if (fresh && state.connected) 1f else 0.5f
-        servo.text = when (state.angle) { 90 -> "ESP đã đặt servo: Thu vào · 90°"; 0 -> "ESP đã đặt servo: Đưa ra · 0°"; else -> "Chưa có trạng thái servo" }
+        servo.text = when (state.angle) { 90 -> "ESP đã đặt servo: Thu vào"; 0 -> "ESP đã đặt servo: Đưa ra được"; else -> "Chưa có trạng thái servo" }
         rendering = true; mode.isChecked = state.mode == "AUTO"
         mode.text = when (state.mode) { "AUTO" -> "TỰ ĐỘNG"; "MANUAL" -> "THỦ CÔNG"; else -> "CHƯA XÁC ĐỊNH CHẾ ĐỘ" }
         rendering = false

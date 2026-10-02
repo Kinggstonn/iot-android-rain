@@ -166,6 +166,8 @@ HTTPS xác minh bằng GTS Root R1 hiện hành, lấy từ [Google Trust Servic
 
 Giữ D3/D4 ở mức boot hợp lệ. SG90 dùng nguồn 5V riêng đủ dòng, chung GND; không lấy dòng servo từ chân 3.3V ESP. Tín hiệu cảm biến 5V cần chuyển mức trước ESP8266. Nếu dùng DHT22, đổi `DHT11` thành `DHT22`; cảm biến mưa active HIGH thì đổi `RAIN_LEVEL`.
 
+Servo lắp ngược chiều nên firmware đảo hướng và dùng hành trình 180°: giá trị logic (`targetAngle`/`servoAngle` trong Firebase, app và Security Rules) vẫn là `0` = đưa đồ ra và `90` = thu đồ vào, còn góc PWM thực tế là `90 → 0°` và `0 → 180°` qua hàm `servoWrite()`. Chỉ cần sửa hàm này nếu muốn đổi lại hướng quay hoặc giới hạn hành trình.
+
 Firmware debounce mưa 300ms, đọc DHT mỗi 2 giây, đếm xung bằng ISR, tính lưu lượng theo thời gian lấy mẫu thực. `totalMl` là tích lũy từ lúc khởi động; giá trị sẽ về 0 khi ESP reset hoặc khi người dùng xác nhận nút **Đặt lại tổng lượng mưa** trong app. Hệ số `FLOW_HZ_PER_LPM = 5.5` kế thừa sketch đang có, chỉ là giá trị thử và **phải hiệu chuẩn**:
 
 ```text
@@ -191,7 +193,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`.
 Kiểm tra tích hợp sau khi điền cấu hình:
 
 1. Dữ liệu thật hiện đủ đơn vị °C, %, L/min, mL. Ngắt DHT: hai ô hiện `—`.
-2. AUTO + mưa → ESP đặt 90°, khô → 0°. Hai nút thủ công bị khóa.
+2. AUTO + mưa → ESP thu đồ vào (góc PWM 0°), khô → đưa đồ ra (180°). Hai nút thủ công bị khóa.
 3. Chuyển MANUAL, chờ ACK rồi thử 90° và 0°; `reported` phải đổi theo.
 4. Tắt Wi-Fi điện thoại: báo offline, khóa nút; bật lại: tự cập nhật.
 5. Tắt ESP nhưng giữ điện thoại online: sau 20 giây báo dữ liệu cũ, khóa nút.
