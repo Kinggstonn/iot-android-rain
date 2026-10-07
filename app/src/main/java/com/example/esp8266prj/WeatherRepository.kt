@@ -5,6 +5,17 @@ import com.google.firebase.database.*
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.UUID
 
+/** Flow-based rain level. Thresholds are L/min; a zero or missing reading means no data. */
+const val HEAVY_RAIN_LPM = 0.5
+
+enum class RainLevel { NO_DATA, LIGHT, HEAVY }
+
+fun rainLevel(flow: Double?): RainLevel = when {
+    flow == null || flow <= 0.0 -> RainLevel.NO_DATA
+    flow >= HEAVY_RAIN_LPM -> RainLevel.HEAVY
+    else -> RainLevel.LIGHT
+}
+
 data class WeatherState(
     val connected: Boolean = false,
     val temperature: Double? = null,
@@ -19,11 +30,16 @@ data class WeatherState(
     val error: String? = null,
     val notificationError: String? = null
 ) {
+    val level: RainLevel get() = rainLevel(flow)
     fun fresh(now: Long) = updatedAt > 0 && now - updatedAt in -5000L..20000L
 }
 
 /** Telemetry/reported belong to the ESP; control belongs to the phone. */
-class WeatherRepository(private val deviceId: String, private val changed: (WeatherState) -> Unit) {
+class WeatherRepository(
+    private val deviceId: String,
+    private val notificationsEnabled: () -> Boolean,
+    private val changed: (WeatherState) -> Unit
+) {
     private val db = FirebaseDatabase.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private val root = db.getReference("devices/$deviceId")
@@ -67,10 +83,19 @@ class WeatherRepository(private val deviceId: String, private val changed: (Weat
     fun registerToken() {
         val uid = auth.currentUser?.uid ?: return
         FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            if (active) db.getReference("users/$uid/fcmTokens/$token").setValue(true)
+            if (!active) return@addOnSuccessListener
+            db.getReference("users/$uid/fcmTokens/$token").setValue(true)
                 .addOnSuccessListener { if (active) emit(state.copy(notificationError = null)) }
                 .addOnFailureListener { emit(state.copy(notificationError = "Cảnh báo mưa chưa đăng ký: ${it.localizedMessage}")) }
         }.addOnFailureListener { if (active) emit(state.copy(notificationError = "Chưa lấy được token thông báo; nút điều khiển vẫn dùng được.")) }
+    }
+    /** Re-registers the current token; the permission dialog may have been answered after the first attempt. */
+    fun retryRegistration() {
+        if (!notificationsEnabled()) {
+            emit(state.copy(notificationError = "Thông báo đang bị tắt. Bật lại trong Cài đặt Android để nhận cảnh báo mưa."))
+            return
+        }
+        registerToken()
     }
     fun command(mode: String, angle: Int, resetTotal: Boolean = false,
                 done: (String?, String?) -> Unit) {

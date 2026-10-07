@@ -1,7 +1,7 @@
 const { initializeApp } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 const { onValueUpdated } = require('firebase-functions/v2/database');
-const { startsRaining } = require('./rain');
+const { startsRaining, rainLevel } = require('./rain');
 initializeApp();
 
 // Match this region to the Realtime Database location before deployment.
@@ -22,13 +22,15 @@ exports.rainAlert = onValueUpdated({
     }
   }
   const tokens = [...tokenOwners.keys()];
+  const level = rainLevel(event.data.after.child('flowLpm').val());
+  const label = level === 'HEAVY' ? 'MƯA TO' : level === 'LIGHT' ? 'MƯA NHỎ' : 'ĐANG MƯA';
   let transientFailure = false;
   for (let i = 0; i < tokens.length; i += 500) {
     const batch = tokens.slice(i, i + 500);
     const result = await getMessaging().sendEachForMulticast({
       tokens: batch,
-      notification: { title: 'ĐANG MƯA', body: `${event.params.deviceId}: Phát hiện mưa. Kiểm tra trạng thái giàn phơi.` },
-      data: { deviceId: event.params.deviceId, eventId: event.id },
+      notification: { title: label, body: `${event.params.deviceId}: Phát hiện mưa. Kiểm tra trạng thái giàn phơi.` },
+      data: { deviceId: event.params.deviceId, eventId: event.id, level },
       android: { priority: 'high', ttl: 120000, notification: {
         channelId: 'rain_alerts', icon: 'ic_rain', tag: 'rain', sound: 'default',
         defaultVibrateTimings: true

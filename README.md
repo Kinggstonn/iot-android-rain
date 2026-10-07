@@ -1,6 +1,6 @@
 # Giám sát thời tiết & giàn phơi — Kotlin + Firebase
 
-Ứng dụng Android native (Material 3 Views, minSdk 24) kết nối Firebase Realtime Database. Có đăng nhập Email/Password, bốn thẻ cảm biến, badge mưa, chuyển AUTO/MANUAL, điều khiển servo và thông báo FCM khi khô chuyển sang mưa. Màn hình cuộn, nền sáng, chữ lớn; số liệu chưa có hiển thị `—`, không giả lập giá trị cảm biến.
+Ứng dụng Android native (Material 3 Views, minSdk 24) kết nối Firebase Realtime Database. Có đăng nhập Email/Password, bốn thẻ cảm biến, mức mưa (to / nhỏ / không có dữ liệu) suy ra từ lưu lượng nước, chuyển AUTO/MANUAL, điều khiển servo và thông báo FCM khi khô chuyển sang mưa. Màn hình cuộn, nền sáng, chữ lớn; số liệu chưa có hiển thị `—`, không giả lập giá trị cảm biến.
 
 ## 1. Cấu trúc mã nguồn
 
@@ -142,10 +142,22 @@ firebase deploy --only database,functions
 ```
 
 3. Trước deploy, sửa `region` trong `functions/index.js` cho cùng location RTDB; mẫu là `asia-southeast1`. Nếu một project có nhiều RTDB trong cùng region, thêm `instance: 'TEN_DATABASE_INSTANCE'` vào options của trigger để giới hạn nguồn sự kiện.
-4. Đăng nhập app và chấp nhận notification. Token được lưu riêng ở `users/<uid>/fcmTokens/<token>`. Function chỉ gửi tới người được cấp quyền tại `deviceUsers/<deviceId>`; không dùng topic công khai.
+4. Đăng nhập app và chấp nhận notification. Token được lưu riêng ở `users/<uid>/fcmTokens/<token>`. Function chỉ gửi tới người được cấp quyền tại `deviceUsers/<deviceId>`; không dùng topic công khai. Nếu FCM làm mới token khi app đang đóng, `RainMessagingService` chờ FirebaseAuth khôi phục phiên rồi mới ghi token, nên token không bị mất. Nút **Cho phép cảnh báo mưa** kiểm tra lại quyền và đăng ký lại token mỗi lần bấm; khi quyền bị tắt, dashboard hiển thị cảnh báo thay vì im lặng.
 5. Test bằng cách gửi telemetry `raining: false`, sau đó `true`. `true → true`, `true → false`, và bản ghi lần đầu `null → true` không gửi thông báo. Không cần thiết bị Android mở dashboard để nhận notification nền.
 
 Foreground: `onMessageReceived` tự dựng notification. Background: FCM notification payload để Android tự hiển thị. [Cách nhận FCM chính thức](https://firebase.google.com/docs/cloud-messaging/android/receive-messages).
+
+### Mức mưa theo lưu lượng nước
+
+Mức mưa nằm ngay dưới thẻ **Lưu lượng nước**, suy ra từ `telemetry.flowLpm` với ngưỡng `HEAVY_RAIN_LPM = 0.5`:
+
+| `flowLpm` | Hiển thị | Màu |
+|---|---|---|
+| `null` hoặc `<= 0` | KHÔNG CÓ DỮ LIỆU | xám |
+| `> 0` và `< 0.5` | MƯA NHỎ | hổ phách |
+| `>= 0.5` | MƯA TO | đỏ |
+
+App hiển thị lưu lượng bằng **mL/giây**, quy đổi từ `flowLpm` theo công thức `flowLpm × 1000 / 60`. Ngưỡng mưa to 0.5 L/phút tương đương khoảng **8.333 mL/giây**. Dòng phụ dưới badge cũng hiển thị ngưỡng bằng mL/giây. Ngưỡng khai báo ở hai nơi và phải giữ khớp: `HEAVY_RAIN_LPM` trong `WeatherRepository.kt` và trong `firebase/functions/rain.js`. Cloud Function gửi kèm `data.level` (`HEAVY`/`LIGHT`/`NO_DATA`) và đặt tiêu đề thông báo theo mức mưa; app dùng `data.level` làm phương án dự phòng khi payload không có tiêu đề.
 
 FCM là dịch vụ best-effort, không bảo đảm tức thì hoặc đúng một lần. Mất Internet, Doze, Force stop, tắt quyền/channel, hoặc tiết kiệm pin có thể làm trễ/ngăn thông báo. Function loại sự kiện quá 2 phút và đặt TTL 2 phút; retry có thể cập nhật lại notification cùng tag. Thu đồ tự động phải chạy tại ESP, không phụ thuộc điện thoại hay FCM.
 
@@ -192,7 +204,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 Kiểm tra tích hợp sau khi điền cấu hình:
 
-1. Dữ liệu thật hiện đủ đơn vị °C, %, L/min, mL. Ngắt DHT: hai ô hiện `—`.
+1. Dữ liệu thật hiện đủ đơn vị °C, %, mL/giây, mL. Lưu lượng 1 L/phút trên Firebase hiển thị 16.667 mL/giây. Ngắt DHT: hai ô hiện `—`.
 2. AUTO + mưa → ESP thu đồ vào (góc PWM 0°), khô → đưa đồ ra (180°). Hai nút thủ công bị khóa.
 3. Chuyển MANUAL, chờ ACK rồi thử 90° và 0°; `reported` phải đổi theo.
 4. Tắt Wi-Fi điện thoại: báo offline, khóa nút; bật lại: tự cập nhật.

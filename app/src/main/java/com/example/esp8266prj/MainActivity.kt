@@ -1,6 +1,7 @@
 package com.example.esp8266prj
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -15,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -30,12 +32,14 @@ class MainActivity : AppCompatActivity() {
     private val muted = Color.rgb(86, 103, 94)
     private val green = Color.rgb(26, 106, 70)
     private val red = Color.rgb(173, 38, 44)
+    private val amber = Color.rgb(176, 106, 12)
     private val surface = Color.WHITE
     private val handler = Handler(Looper.getMainLooper())
     private var repository: WeatherRepository? = null
     private lateinit var content: LinearLayout
     private lateinit var connection: TextView
     private lateinit var rain: TextView
+    private lateinit var rainHint: TextView
     private lateinit var temperature: TextView
     private lateinit var humidity: TextView
     private lateinit var flow: TextView
@@ -54,7 +58,8 @@ class MainActivity : AppCompatActivity() {
     private var commandAttempt = 0L
     private val preferences by lazy { getSharedPreferences("weather", MODE_PRIVATE) }
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
-        if (!allowed) Toast.makeText(this, "Thông báo chưa được cấp quyền. Có thể bật lại trong Cài đặt Android.", Toast.LENGTH_LONG).show()
+        if (allowed) repository?.retryRegistration()
+        else Toast.makeText(this, "Thông báo chưa được cấp quyền. Có thể bật lại trong Cài đặt Android.", Toast.LENGTH_LONG).show()
     }
     private val tick = object : Runnable {
         override fun run() {
@@ -83,6 +88,8 @@ class MainActivity : AppCompatActivity() {
     }
     override fun onStart() { super.onStart(); repository?.start(); handler.post(tick) }
     override fun onStop() { handler.removeCallbacks(tick); repository?.stop(); super.onStop() }
+    private fun notificationsAllowed() = Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun shell() {
         val scroll = ScrollView(this).apply { setBackgroundColor(paper); isFillViewport = true }
@@ -143,9 +150,12 @@ class MainActivity : AppCompatActivity() {
         shell(); title("Thời tiết tại nhà")
         val deviceId = preferences.getString("deviceId", "dryer-01") ?: "dryer-01"
         connection = label("Đang kết nối • $deviceId", 14)
-        rain = label("CHƯA CÓ DỮ LIỆU MƯA", 22)
         temperature = metric("☀  Nhiệt độ", "°C"); humidity = metric("◉  Độ ẩm", "%")
-        flow = metric("≈  Lưu lượng nước", "L/min"); total = metric("▤  Tổng tích lũy", "mL")
+        flow = metric("≈  Lưu lượng nước", "mL/giây")
+        label("Mức mưa", 14)
+        rain = label("KHÔNG CÓ DỮ LIỆU", 22)
+        rainHint = label("", 14)
+        total = metric("▤  Tổng tích lũy", "mL")
         label("Giàn phơi", 24); servo = label("Chưa có trạng thái servo")
         mode = MaterialSwitch(this).apply {
             text = "TỰ ĐỘNG"; setTextColor(ink); minHeight = dp(56)
@@ -173,7 +183,7 @@ class MainActivity : AppCompatActivity() {
         button("Cho phép cảnh báo mưa") {
             if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
             else Toast.makeText(this, "Có thể chỉnh chuông/rung trong Cài đặt thông báo Android.", Toast.LENGTH_LONG).show()
-            repository?.registerToken()
+            repository?.retryRegistration()
         }
         button("Kết nối lại") { repository?.stop(); repository?.start() }
         button("Chọn thiết bị") {
@@ -186,7 +196,8 @@ class MainActivity : AppCompatActivity() {
                     } else Toast.makeText(this, "Mã gồm chữ, số, dấu - hoặc _ (tối đa 64 ký tự).", Toast.LENGTH_LONG).show()
                 }.setNegativeButton("Hủy", null).show()
         }
-        repository = WeatherRepository(deviceId, ::render).also { it.start() }; render(repository!!.state)
+        repository = WeatherRepository(deviceId, ::notificationsAllowed, ::render).also { it.start() }
+        render(repository!!.state)
         if (Build.VERSION.SDK_INT >= 33 && !preferences.getBoolean("askedNotifications", false)) {
             preferences.edit().putBoolean("askedNotifications", true).apply()
             permission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -219,10 +230,26 @@ class MainActivity : AppCompatActivity() {
         fun value(number: Double?, unit: String, digits: Int = 1) =
             if (number == null) "— $unit" else String.format(Locale.getDefault(), "%.${digits}f %s", number, unit)
         temperature.text = value(state.temperature, "°C"); humidity.text = value(state.humidity, "%")
-        flow.text = value(state.flow, "L/min", 3); total.text = value(state.total, "mL", 0)
-        rain.text = when (state.raining) { true -> "●  ĐANG MƯA"; false -> "●  TẠNH RÁO"; null -> "CHƯA CÓ DỮ LIỆU MƯA" }
-        rain.setTextColor(when (state.raining) { true -> red; false -> green; null -> muted })
+        // Firebase flowLpm is in L/min: convert litres to mL and minutes to seconds.
+        flow.text = value(state.flow?.let { it * 1000.0 / 60.0 }, "mL/giây", 3)
+        total.text = value(state.total, "mL", 0)
+        rain.text = when (state.level) {
+            RainLevel.HEAVY -> "●  MƯA TO"
+            RainLevel.LIGHT -> "●  MƯA NHỎ"
+            RainLevel.NO_DATA -> "●  KHÔNG CÓ DỮ LIỆU"
+        }
+        rain.setTextColor(when (state.level) {
+            RainLevel.HEAVY -> red
+            RainLevel.LIGHT -> amber
+            RainLevel.NO_DATA -> muted
+        })
         rain.alpha = if (fresh && state.connected) 1f else 0.5f
+        val heavyRainMlPerSecond = String.format(Locale.getDefault(), "%.3f", HEAVY_RAIN_LPM * 1000.0 / 60.0)
+        rainHint.text = when (state.level) {
+            RainLevel.HEAVY -> "Lưu lượng ≥ $heavyRainMlPerSecond mL/giây"
+            RainLevel.LIGHT -> "Lưu lượng > 0 và < $heavyRainMlPerSecond mL/giây"
+            RainLevel.NO_DATA -> "Lưu lượng nước bằng 0"
+        }
         servo.text = when (state.angle) { 90 -> "ESP đã đặt servo: Thu vào"; 0 -> "ESP đã đặt servo: Đưa ra được"; else -> "Chưa có trạng thái servo" }
         rendering = true; mode.isChecked = state.mode == "AUTO"
         mode.text = when (state.mode) { "AUTO" -> "TỰ ĐỘNG"; "MANUAL" -> "THỦ CÔNG"; else -> "CHƯA XÁC ĐỊNH CHẾ ĐỘ" }

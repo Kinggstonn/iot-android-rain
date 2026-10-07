@@ -40,13 +40,37 @@ object RainNotifications {
     }
 }
 
-class RainMessagingService : FirebaseMessagingService() {
-    override fun onNewToken(token: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+object RainTokens {
+    /** FCM can start this service in a fresh process before FirebaseAuth restores the session. */
+    fun save(token: String) {
+        val auth = FirebaseAuth.getInstance()
+        auth.currentUser?.uid?.let { write(it, token) } ?: run {
+            val listener = object : FirebaseAuth.AuthStateListener {
+                override fun onAuthStateChanged(firebaseAuth: FirebaseAuth) {
+                    val uid = firebaseAuth.currentUser?.uid ?: return
+                    firebaseAuth.removeAuthStateListener(this)
+                    write(uid, token)
+                }
+            }
+            auth.addAuthStateListener(listener)
+        }
+    }
+    private fun write(uid: String, token: String) {
         FirebaseDatabase.getInstance().getReference("users/$uid/fcmTokens/$token").setValue(true)
     }
+}
+
+class RainMessagingService : FirebaseMessagingService() {
+    override fun onNewToken(token: String) {
+        RainTokens.save(token)
+    }
     override fun onMessageReceived(message: RemoteMessage) {
-        RainNotifications.show(this, message.notification?.title ?: "ĐANG MƯA",
+        val fallback = when (message.data["level"]) {
+            "HEAVY" -> "MƯA TO"
+            "LIGHT" -> "MƯA NHỎ"
+            else -> "ĐANG MƯA"
+        }
+        RainNotifications.show(this, message.notification?.title ?: fallback,
             message.notification?.body ?: "Cảm biến phát hiện mưa. Kiểm tra trạng thái giàn phơi.")
     }
 }
